@@ -1,0 +1,19 @@
+# Datos sensibles de agentes — no subir al repo
+*.csv
+*.xlsx
+*.xls
+
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs / temp
+*.log
+*.tmp

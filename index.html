@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Revisor de Comisiones · Seguros Digitales SDI</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  .drag-active { outline: 3px dashed #2563eb; outline-offset: -8px; background: #eff6ff; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen flex flex-col">
+
+<header class="bg-gradient-to-r from-blue-800 to-blue-950 text-white shadow-lg">
+  <div class="max-w-6xl mx-auto px-4 py-5 flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h1 class="text-xl md:text-2xl font-bold tracking-tight">Revisor de Comisiones INS</h1>
+      <p class="text-blue-200 text-sm">Validá tu pago de comisiones por quincena</p>
+    </div>
+    <div class="flex gap-2 flex-wrap items-center">
+      <div class="flex flex-col">
+        <label class="text-xs text-blue-200">Agente</label>
+        <input id="agent-name" placeholder="Nombre del agente" class="px-3 py-1.5 rounded text-slate-900 text-sm w-56 border-0 focus:ring-2 focus:ring-blue-300">
+      </div>
+      <div class="flex flex-col">
+        <label class="text-xs text-blue-200">Licencia</label>
+        <input id="agent-license" placeholder="Licencia" class="px-3 py-1.5 rounded text-slate-900 text-sm w-40 border-0 focus:ring-2 focus:ring-blue-300">
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="flex-1 max-w-6xl mx-auto w-full p-4 space-y-4">
+
+  <!-- Upload -->
+  <section id="upload-section" class="bg-white rounded-lg shadow p-8 text-center transition-all">
+    <svg class="w-16 h-16 mx-auto text-blue-500 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+    </svg>
+    <h2 class="text-lg font-semibold text-slate-800 mb-1">Cargá tu CSV de comisiones INS</h2>
+    <p class="text-slate-500 text-sm mb-4">Arrastrá el archivo aquí o hacé clic para seleccionarlo</p>
+    <input type="file" id="csv-input" accept=".csv,text/csv" class="hidden">
+    <button onclick="document.getElementById('csv-input').click()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium shadow-sm transition">
+      Seleccionar CSV
+    </button>
+    <p id="upload-error" class="text-red-600 text-sm mt-3 hidden"></p>
+  </section>
+
+  <!-- Results -->
+  <div id="results" class="hidden space-y-4">
+
+    <!-- Summary cards -->
+    <section class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-xs text-slate-500 uppercase tracking-wide">Comisión total</div>
+        <div id="stat-comision" class="text-2xl font-bold text-green-600 mt-1">₡0</div>
+      </div>
+      <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-xs text-slate-500 uppercase tracking-wide">Primas</div>
+        <div id="stat-prima" class="text-2xl font-bold text-blue-600 mt-1">₡0</div>
+      </div>
+      <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-xs text-slate-500 uppercase tracking-wide">Registros</div>
+        <div id="stat-count" class="text-2xl font-bold text-slate-800 mt-1">0</div>
+      </div>
+      <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-xs text-slate-500 uppercase tracking-wide">Duplicados</div>
+        <div id="stat-dupes" class="text-2xl font-bold text-red-600 mt-1">0</div>
+      </div>
+    </section>
+
+    <!-- Chart + stats -->
+    <section class="grid md:grid-cols-2 gap-4">
+      <div class="bg-white rounded-lg shadow p-4">
+        <h3 class="font-semibold text-slate-700 mb-3">Comisión por línea</h3>
+        <canvas id="chart-lineas" height="200"></canvas>
+      </div>
+      <div class="bg-white rounded-lg shadow p-4">
+        <h3 class="font-semibold text-slate-700 mb-3">Desglose por línea</h3>
+        <div id="stats-table" class="overflow-auto max-h-64"></div>
+      </div>
+    </section>
+
+    <!-- Filter + Table -->
+    <section class="bg-white rounded-lg shadow p-4">
+      <div class="flex flex-wrap gap-3 items-center mb-3">
+        <label class="text-sm font-medium text-slate-700">Línea:</label>
+        <select id="filter-line" class="border border-slate-300 rounded px-3 py-1.5 text-sm"></select>
+        <label class="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" id="filter-dupes" class="accent-red-600 w-4 h-4">
+          Solo duplicados
+        </label>
+        <input id="filter-search" placeholder="Buscar nombre o póliza..." class="border border-slate-300 rounded px-3 py-1.5 text-sm flex-1 min-w-[200px]">
+        <button id="btn-excel" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium shadow-sm transition">
+          Descargar Excel
+        </button>
+        <button id="btn-clear" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded text-sm font-medium transition">
+          Limpiar
+        </button>
+      </div>
+      <div class="overflow-auto max-h-[500px] border border-slate-200 rounded">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-100 sticky top-0 z-10">
+            <tr id="table-header"></tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+      <div class="text-xs text-slate-500 mt-2" id="row-count"></div>
+    </section>
+  </div>
+</main>
+
+<footer class="text-center py-5 text-sm text-slate-500 bg-white border-t border-slate-200">
+  Powered by <a href="https://segurosdigitales.com" target="_blank" class="font-semibold text-blue-700 hover:text-blue-900">Seguros Digitales SDI</a>
+</footer>
+
+<script>
+let data = [];
+let dupeIndices = new Set();
+let chart = null;
+
+const $ = (id) => document.getElementById(id);
+
+// Dictionary of INS line codes
+const LINE_NAMES = {
+  AUT: 'Automóviles',
+  IMR: 'Incendio Riesgos (Hogar)',
+  PCR: 'Pensión Colectiva',
+  VTC: 'Vida Temporal Colectiva',
+  HOG: 'Hogar',
+  VID: 'Vida',
+  SAL: 'Salud',
+  VIA: 'Viajero',
+  INV: 'Invalidez',
+  ACC: 'Accidentes',
+  RES: 'Responsabilidad Civil',
+  PYM: 'PYME',
+  MED: 'Medicina',
+  FGA: 'Fianza',
+  PER: 'Personales',
+  MAR: 'Marítimo',
+  TRN: 'Transporte',
+  NAV: 'Navegación',
+  MXE: 'Múltiple Empresarial',
+  PCA: 'Pensión Complementaria A',
+  PCB: 'Pensión Complementaria B',
+  PVM: 'Pensión Vida Múltiple',
+  EDU: 'Educativo',
+  TEC: 'Equipo Técnico',
+  TOD: 'Todo Riesgo',
+  ROB: 'Robo',
+  CUM: 'Cumplimiento',
+  FDL: 'Fidelidad'
+};
+const lineName = (code) => LINE_NAMES[code] || code;
+
+const fmtColones = new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC', minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const fmtNum = new Intl.NumberFormat('es-CR');
+
+// Agent info persistence
+$('agent-name').value = localStorage.getItem('sdi_agente_nombre') || '';
+$('agent-license').value = localStorage.getItem('sdi_agente_licencia') || '';
+$('agent-name').addEventListener('input', (e) => localStorage.setItem('sdi_agente_nombre', e.target.value));
+$('agent-license').addEventListener('input', (e) => localStorage.setItem('sdi_agente_licencia', e.target.value));
+
+// Parse numeric values with Spanish format: "287348,00" or "1.234.567,89"
+function parseNum(v) {
+  if (v == null || v === '') return 0;
+  const s = String(v).trim().replace(/\./g, '').replace(',', '.');
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+// Format date YYYYMMDD → DD/MM/YYYY
+function fmtDate(s) {
+  if (!s || s.length !== 8) return s || '';
+  return `${s.slice(6,8)}/${s.slice(4,6)}/${s.slice(0,4)}`;
+}
+
+function parseCSV(file) {
+  $('upload-error').classList.add('hidden');
+  Papa.parse(file, {
+    header: true,
+    delimiter: ';',
+    encoding: 'ISO-8859-1',
+    skipEmptyLines: true,
+    transformHeader: (h) => h.trim(),
+    complete: (results) => {
+      try {
+        data = results.data
+          .map(row => {
+            const r = {};
+            Object.keys(row).forEach(k => {
+              r[k] = typeof row[k] === 'string' ? row[k].trim() : row[k];
+            });
+            r.PRIMA = parseNum(r.PRIMA);
+            r.PAGO_REINT = parseNum(r.PAGO_REINT);
+            r.REINT_4__B = parseNum(r.REINT_4__B);
+            return r;
+          })
+          .filter(r => r.POLIZA);
+
+        if (!data.length) throw new Error('El CSV no tiene filas válidas. Revisá que sea un reporte de comisiones INS.');
+
+        detectDuplicates();
+        saveData();
+        render();
+      } catch (err) {
+        showError(err.message);
+      }
+    },
+    error: (err) => showError('Error al leer el CSV: ' + err.message)
+  });
+}
+
+function showError(msg) {
+  const el = $('upload-error');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+// Duplicate = entire row identical to another
+function detectDuplicates() {
+  const hashes = {};
+  data.forEach((row, i) => {
+    const h = Object.keys(row).sort().map(k => `${k}=${row[k]}`).join('|');
+    (hashes[h] = hashes[h] || []).push(i);
+  });
+  dupeIndices = new Set();
+  Object.values(hashes).forEach(indices => {
+    if (indices.length > 1) indices.forEach(i => dupeIndices.add(i));
+  });
+}
+
+function statsByLine(rows) {
+  const s = {};
+  rows.forEach(r => {
+    const c = r.CLASE || '??';
+    if (!s[c]) s[c] = { count: 0, prima: 0, comision: 0 };
+    s[c].count++;
+    s[c].prima += r.PRIMA || 0;
+    s[c].comision += r.PAGO_REINT || 0;
+  });
+  return s;
+}
+
+function getFilteredIndices() {
+  const line = $('filter-line').value || 'TODAS';
+  const onlyDupes = $('filter-dupes').checked;
+  const search = ($('filter-search').value || '').toLowerCase().trim();
+  const out = [];
+  data.forEach((r, i) => {
+    if (line !== 'TODAS' && r.CLASE !== line) return;
+    if (onlyDupes && !dupeIndices.has(i)) return;
+    if (search) {
+      const hay = (r.NOMBRE || '').toLowerCase() + ' ' + (r.POLIZA || '').toLowerCase();
+      if (!hay.includes(search)) return;
+    }
+    out.push(i);
+  });
+  return out;
+}
+
+function render() {
+  if (!data.length) {
+    $('upload-section').classList.remove('hidden');
+    $('results').classList.add('hidden');
+    return;
+  }
+  $('upload-section').classList.add('hidden');
+  $('results').classList.remove('hidden');
+
+  // Summary cards (global, not filtered)
+  const totalComision = data.reduce((s, r) => s + (r.PAGO_REINT || 0), 0);
+  const totalPrima = data.reduce((s, r) => s + (r.PRIMA || 0), 0);
+  $('stat-comision').textContent = fmtColones.format(totalComision);
+  $('stat-prima').textContent = fmtColones.format(totalPrima);
+  $('stat-count').textContent = fmtNum.format(data.length);
+  $('stat-dupes').textContent = fmtNum.format(dupeIndices.size);
+
+  // Filter options
+  const lines = [...new Set(data.map(r => r.CLASE).filter(Boolean))].sort();
+  const current = $('filter-line').value || 'TODAS';
+  $('filter-line').innerHTML = `<option value="TODAS">Todas las líneas</option>` +
+    lines.map(l => `<option value="${l}">${l} — ${lineName(l)}</option>`).join('');
+  $('filter-line').value = lines.includes(current) || current === 'TODAS' ? current : 'TODAS';
+
+  // Stats by line table + chart
+  const stats = statsByLine(data);
+  const statRows = Object.entries(stats).sort((a,b) => b[1].comision - a[1].comision);
+  const totalCom = statRows.reduce((s, [,v]) => s + v.comision, 0);
+
+  $('stats-table').innerHTML = `
+    <table class="w-full text-sm">
+      <thead class="bg-slate-100 sticky top-0"><tr>
+        <th class="text-left p-2">Línea</th>
+        <th class="text-right p-2">N°</th>
+        <th class="text-right p-2">Comisión</th>
+        <th class="text-right p-2">%</th>
+      </tr></thead>
+      <tbody>
+        ${statRows.map(([code, s]) => `
+          <tr class="border-t hover:bg-slate-50">
+            <td class="p-2"><strong>${code}</strong><div class="text-slate-500 text-xs">${lineName(code)}</div></td>
+            <td class="p-2 text-right">${s.count}</td>
+            <td class="p-2 text-right font-mono">${fmtColones.format(s.comision)}</td>
+            <td class="p-2 text-right text-slate-500">${totalCom ? ((s.comision/totalCom)*100).toFixed(1) : 0}%</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+
+  renderChart(statRows);
+  renderTable();
+}
+
+function renderChart(statRows) {
+  const ctx = $('chart-lineas').getContext('2d');
+  if (chart) chart.destroy();
+  const colors = ['#2563eb','#16a34a','#dc2626','#ea580c','#ca8a04','#9333ea','#0891b2','#db2777','#65a30d','#7c3aed','#be123c','#0d9488'];
+  chart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: statRows.map(r => r[0]),
+      datasets: [{
+        label: 'Comisión',
+        data: statRows.map(r => r[1].comision),
+        backgroundColor: statRows.map((_, i) => colors[i % colors.length]),
+        borderWidth: 0,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => fmtColones.format(ctx.parsed.y)
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { callback: (v) => fmtColones.format(v) }
+        }
+      }
+    }
+  });
+}
+
+function renderTable() {
+  const indices = getFilteredIndices();
+  const cols = [
+    { key: 'CLASE', label: 'Línea', class: 'font-semibold' },
+    { key: 'POLIZA', label: 'Póliza', class: 'font-mono text-xs' },
+    { key: 'MODULO', label: 'Mód', class: 'text-center' },
+    { key: 'NOMBRE', label: 'Cliente', class: '' },
+    { key: 'FEC_PAGADO', label: 'Pagado', class: 'text-xs', fmt: fmtDate },
+    { key: 'PRIMA', label: 'Prima', class: 'text-right font-mono text-xs', fmt: fmtColones.format },
+    { key: 'PAGO_REINT', label: 'Comisión', class: 'text-right font-mono font-semibold', fmt: fmtColones.format },
+    { key: 'RECIBO', label: 'Recibo', class: 'font-mono text-xs' }
+  ];
+
+  $('table-header').innerHTML = cols.map(c =>
+    `<th class="text-left p-2 text-xs uppercase tracking-wide text-slate-600 ${c.class.includes('right') ? 'text-right' : ''}">${c.label}</th>`
+  ).join('') + '<th></th>';
+
+  // Render max 1000 rows for performance, show total filtered
+  const max = 1000;
+  const show = indices.slice(0, max);
+
+  $('table-body').innerHTML = show.map(i => {
+    const r = data[i];
+    const isDup = dupeIndices.has(i);
+    return `
+      <tr class="border-t hover:bg-slate-50 ${isDup ? 'bg-red-50' : ''}">
+        ${cols.map(c => {
+          let v = r[c.key];
+          if (c.fmt && v != null) v = c.fmt(v);
+          return `<td class="p-2 ${c.class}">${v ?? ''}</td>`;
+        }).join('')}
+        <td class="p-2">${isDup ? '<span class="text-red-600 text-xs font-bold bg-red-100 px-1.5 py-0.5 rounded">DUP</span>' : ''}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const total = indices.length;
+  const suma = indices.reduce((s, i) => s + (data[i].PAGO_REINT || 0), 0);
+  $('row-count').innerHTML = `Mostrando ${total > max ? max : total} de ${total} registros filtrados ` +
+    `(${fmtNum.format(data.length)} totales) · ` +
+    `<strong>Comisión filtrada: ${fmtColones.format(suma)}</strong>`;
+}
+
+function exportExcel() {
+  const indices = getFilteredIndices();
+  const rows = indices.map(i => ({ ...data[i], DUPLICADO: dupeIndices.has(i) ? 'SI' : 'NO' }));
+
+  const agente = $('agent-name').value || 'Agente';
+  const licencia = $('agent-license').value || '';
+  const stats = statsByLine(indices.map(i => data[i]));
+  const statRows = Object.entries(stats).sort((a,b) => b[1].comision - a[1].comision);
+  const totalCom = statRows.reduce((s,[,v]) => s + v.comision, 0);
+  const totalPrima = statRows.reduce((s,[,v]) => s + v.prima, 0);
+
+  const summary = [
+    ['REVISOR DE COMISIONES INS'],
+    ['Powered by Seguros Digitales SDI'],
+    [],
+    ['Agente', agente],
+    ['Licencia', licencia],
+    ['Fecha revisión', new Date().toLocaleDateString('es-CR')],
+    [],
+    ['RESUMEN'],
+    ['Registros', rows.length],
+    ['Primas total', totalPrima],
+    ['Comisión total', totalCom],
+    ['Duplicados detectados', rows.filter(r => r.DUPLICADO === 'SI').length],
+    [],
+    ['DESGLOSE POR LÍNEA'],
+    ['Código', 'Nombre', 'N° registros', 'Primas', 'Comisión', '%'],
+    ...statRows.map(([code, s]) => [
+      code,
+      lineName(code),
+      s.count,
+      s.prima,
+      s.comision,
+      totalCom ? +(s.comision/totalCom*100).toFixed(2) : 0
+    ])
+  ];
+
+  const wb = XLSX.utils.book_new();
+  const ws1 = XLSX.utils.aoa_to_sheet(summary);
+  ws1['!cols'] = [{wch:22},{wch:30},{wch:14},{wch:16},{wch:16},{wch:8}];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Resumen');
+
+  const ws2 = XLSX.utils.json_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, ws2, 'Detalle');
+
+  const fecha = new Date().toISOString().slice(0, 10);
+  const safeName = (agente || 'agente').replace(/[^a-zA-Z0-9]+/g, '_');
+  XLSX.writeFile(wb, `Comisiones_${safeName}_${fecha}.xlsx`);
+}
+
+function saveData() {
+  try {
+    localStorage.setItem('sdi_csv_data', JSON.stringify(data));
+  } catch (e) {
+    console.warn('CSV muy grande para localStorage, se perderá al recargar');
+  }
+}
+
+function loadData() {
+  const saved = localStorage.getItem('sdi_csv_data');
+  if (!saved) return;
+  try {
+    data = JSON.parse(saved);
+    if (Array.isArray(data) && data.length) {
+      detectDuplicates();
+      render();
+    }
+  } catch (e) {}
+}
+
+function clearAll() {
+  if (!confirm('¿Limpiar el CSV cargado?\n\nEsto borra los datos de la quincena actual.\nEl nombre y licencia se mantienen.')) return;
+  data = [];
+  dupeIndices = new Set();
+  localStorage.removeItem('sdi_csv_data');
+  $('csv-input').value = '';
+  $('filter-line').innerHTML = '';
+  $('filter-search').value = '';
+  $('filter-dupes').checked = false;
+  if (chart) { chart.destroy(); chart = null; }
+  render();
+}
+
+// Events
+$('csv-input').addEventListener('change', (e) => {
+  if (e.target.files[0]) parseCSV(e.target.files[0]);
+});
+$('filter-line').addEventListener('change', renderTable);
+$('filter-dupes').addEventListener('change', renderTable);
+$('filter-search').addEventListener('input', renderTable);
+$('btn-excel').addEventListener('click', exportExcel);
+$('btn-clear').addEventListener('click', clearAll);
+
+// Drag & drop
+const uploadSection = $('upload-section');
+['dragover','dragenter'].forEach(ev => uploadSection.addEventListener(ev, (e) => {
+  e.preventDefault();
+  uploadSection.classList.add('drag-active');
+}));
+['dragleave','drop'].forEach(ev => uploadSection.addEventListener(ev, (e) => {
+  e.preventDefault();
+  uploadSection.classList.remove('drag-active');
+}));
+uploadSection.addEventListener('drop', (e) => {
+  const file = e.dataTransfer.files[0];
+  if (file && /\.csv$/i.test(file.name)) parseCSV(file);
+  else showError('Solo se aceptan archivos .csv');
+});
+
+loadData();
+</script>
+</body>
+</html>
