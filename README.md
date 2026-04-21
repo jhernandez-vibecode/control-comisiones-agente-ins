@@ -1,4 +1,4 @@
-# Control de Comisiones INS
+# Control de Comisiones del Agente
 
 App web para que agentes INS validen el pago de comisiones por quincena a partir del CSV oficial que entrega INS.
 
