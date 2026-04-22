@@ -56,33 +56,55 @@
     <!-- Summary cards -->
     <section class="grid grid-cols-2 md:grid-cols-4 gap-3">
       <div class="bg-white rounded-lg shadow p-4">
-        <div class="text-xs text-slate-500 uppercase tracking-wide">Comisión total</div>
-        <div id="stat-comision" class="text-2xl font-bold text-green-600 mt-1">₡0</div>
+        <div class="text-xs uppercase tracking-wide text-blue-700 font-semibold">Colones ₡</div>
+        <div class="mt-2 space-y-1">
+          <div class="flex justify-between items-baseline gap-2">
+            <span class="text-xs text-slate-500">Comisión</span>
+            <span id="stat-comision-crc" class="text-lg font-bold text-green-600">₡0</span>
+          </div>
+          <div class="flex justify-between items-baseline gap-2">
+            <span class="text-xs text-slate-500">Primas</span>
+            <span id="stat-prima-crc" class="text-sm font-semibold text-slate-700">₡0</span>
+          </div>
+          <div id="stat-count-crc" class="text-xs text-slate-400 pt-1">0 pólizas</div>
+        </div>
       </div>
       <div class="bg-white rounded-lg shadow p-4">
-        <div class="text-xs text-slate-500 uppercase tracking-wide">Primas</div>
-        <div id="stat-prima" class="text-2xl font-bold text-blue-600 mt-1">₡0</div>
+        <div class="text-xs uppercase tracking-wide text-emerald-700 font-semibold">Dólares $</div>
+        <div class="mt-2 space-y-1">
+          <div class="flex justify-between items-baseline gap-2">
+            <span class="text-xs text-slate-500">Comisión</span>
+            <span id="stat-comision-usd" class="text-lg font-bold text-emerald-700">$0.00</span>
+          </div>
+          <div class="flex justify-between items-baseline gap-2">
+            <span class="text-xs text-slate-500">Primas</span>
+            <span id="stat-prima-usd" class="text-sm font-semibold text-slate-700">$0.00</span>
+          </div>
+          <div id="stat-count-usd" class="text-xs text-slate-400 pt-1">0 pólizas</div>
+        </div>
       </div>
       <div class="bg-white rounded-lg shadow p-4">
         <div class="text-xs text-slate-500 uppercase tracking-wide">Registros</div>
         <div id="stat-count" class="text-2xl font-bold text-slate-800 mt-1">0</div>
+        <div class="text-xs text-slate-400 mt-0.5">total filas</div>
       </div>
       <div class="bg-white rounded-lg shadow p-4">
         <div class="text-xs text-slate-500 uppercase tracking-wide">Duplicados</div>
         <div id="stat-dupes" class="text-2xl font-bold text-red-600 mt-1">0</div>
+        <div class="text-xs text-slate-400 mt-0.5">filas idénticas</div>
       </div>
     </section>
 
     <!-- Chart + stats -->
     <section class="grid md:grid-cols-2 gap-4">
       <div class="bg-white rounded-lg shadow p-4">
-        <h3 class="font-semibold text-slate-700 mb-3">Comisión por línea</h3>
+        <h3 class="font-semibold text-slate-700 mb-3">Comisión por línea y moneda</h3>
         <div class="relative h-64">
           <canvas id="chart-lineas"></canvas>
         </div>
       </div>
       <div class="bg-white rounded-lg shadow p-4">
-        <h3 class="font-semibold text-slate-700 mb-3">Desglose por línea</h3>
+        <h3 class="font-semibold text-slate-700 mb-3">Desglose por línea y moneda</h3>
         <div id="stats-table" class="overflow-auto max-h-64"></div>
       </div>
     </section>
@@ -90,13 +112,19 @@
     <!-- Filter + Table -->
     <section class="bg-white rounded-lg shadow p-4">
       <div class="flex flex-wrap gap-3 items-center mb-3">
+        <label class="text-sm font-medium text-slate-700">Moneda:</label>
+        <select id="filter-moneda" class="border border-slate-300 rounded px-3 py-1.5 text-sm">
+          <option value="TODAS">Todas</option>
+          <option value="01">₡ Colones</option>
+          <option value="02">$ Dólares</option>
+        </select>
         <label class="text-sm font-medium text-slate-700">Línea:</label>
         <select id="filter-line" class="border border-slate-300 rounded px-3 py-1.5 text-sm"></select>
         <label class="flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" id="filter-dupes" class="accent-red-600 w-4 h-4">
           Solo duplicados
         </label>
-        <input id="filter-search" placeholder="Buscar nombre o póliza..." class="border border-slate-300 rounded px-3 py-1.5 text-sm flex-1 min-w-[200px]">
+        <input id="filter-search" placeholder="Buscar nombre o póliza..." class="border border-slate-300 rounded px-3 py-1.5 text-sm flex-1 min-w-[180px]">
         <button id="btn-excel" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium shadow-sm transition">
           Descargar Excel
         </button>
@@ -128,40 +156,32 @@ let chart = null;
 
 const $ = (id) => document.getElementById(id);
 
-// Dictionary of INS line codes
 const LINE_NAMES = {
-  AUT: 'Automóviles',
-  IMR: 'Incendio Riesgos (Hogar)',
-  PCR: 'Pensión Colectiva',
-  VTC: 'Vida Temporal Colectiva',
-  HOG: 'Hogar',
-  VID: 'Vida',
-  SAL: 'Salud',
-  VIA: 'Viajero',
-  INV: 'Invalidez',
-  ACC: 'Accidentes',
-  RES: 'Responsabilidad Civil',
-  PYM: 'PYME',
-  MED: 'Medicina',
-  FGA: 'Fianza',
-  PER: 'Personales',
-  MAR: 'Marítimo',
-  TRN: 'Transporte',
-  NAV: 'Navegación',
-  MXE: 'Múltiple Empresarial',
-  PCA: 'Pensión Complementaria A',
-  PCB: 'Pensión Complementaria B',
-  PVM: 'Pensión Vida Múltiple',
-  EDU: 'Educativo',
-  TEC: 'Equipo Técnico',
-  TOD: 'Todo Riesgo',
-  ROB: 'Robo',
-  CUM: 'Cumplimiento',
-  FDL: 'Fidelidad'
+  AUT: 'Automóviles', IMR: 'Incendio Riesgos (Hogar)', PCR: 'Pensión Colectiva',
+  VTC: 'Vida Temporal Colectiva', HOG: 'Hogar', VID: 'Vida', SAL: 'Salud',
+  VIA: 'Viajero', INV: 'Invalidez', ACC: 'Accidentes', RES: 'Responsabilidad Civil',
+  PYM: 'PYME', MED: 'Medicina', FGA: 'Fianza', PER: 'Personales', MAR: 'Marítimo',
+  TRN: 'Transporte', NAV: 'Navegación', MXE: 'Múltiple Empresarial',
+  PCA: 'Pensión Complementaria A', PCB: 'Pensión Complementaria B',
+  PVM: 'Pensión Vida Múltiple', EDU: 'Educativo', TEC: 'Equipo Técnico',
+  TOD: 'Todo Riesgo', ROB: 'Robo', CUM: 'Cumplimiento', FDL: 'Fidelidad',
+  ARV: 'Asistencia al Viajero'
 };
 const lineName = (code) => LINE_NAMES[code] || code;
 
-const fmtColones = new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC', minimumFractionDigits: 0, maximumFractionDigits: 0 });
+// INS currency codes: 01 = colones, 02 = dólares
+const CURRENCIES = {
+  '01': {
+    code: 'CRC', symbol: '₡', name: 'Colones',
+    fmt: new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC', minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  },
+  '02': {
+    code: 'USD', symbol: '$', name: 'Dólares',
+    fmt: new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  }
+};
+const moneInfo = (code) => CURRENCIES[code] || { code: code || '??', symbol: '?', name: 'Otra', fmt: { format: (v) => v.toFixed(2) } };
+const fmtMoney = (v, monedaCode) => moneInfo(monedaCode).fmt.format(v || 0);
 const fmtNum = new Intl.NumberFormat('es-CR');
 
 // Agent info persistence
@@ -170,7 +190,6 @@ $('agent-license').value = localStorage.getItem('sdi_agente_licencia') || '';
 $('agent-name').addEventListener('input', (e) => localStorage.setItem('sdi_agente_nombre', e.target.value));
 $('agent-license').addEventListener('input', (e) => localStorage.setItem('sdi_agente_licencia', e.target.value));
 
-// Parse numeric values with Spanish format: "287348,00" or "1.234.567,89"
 function parseNum(v) {
   if (v == null || v === '') return 0;
   const s = String(v).trim().replace(/\./g, '').replace(',', '.');
@@ -178,7 +197,6 @@ function parseNum(v) {
   return isNaN(n) ? 0 : n;
 }
 
-// Format date YYYYMMDD → DD/MM/YYYY
 function fmtDate(s) {
   if (!s || s.length !== 8) return s || '';
   return `${s.slice(6,8)}/${s.slice(4,6)}/${s.slice(0,4)}`;
@@ -226,7 +244,6 @@ function showError(msg) {
   el.classList.remove('hidden');
 }
 
-// Duplicate = entire row identical to another
 function detectDuplicates() {
   const hashes = {};
   data.forEach((row, i) => {
@@ -239,24 +256,40 @@ function detectDuplicates() {
   });
 }
 
-function statsByLine(rows) {
+function totalsByCurrency(rows) {
+  const out = {};
+  rows.forEach(r => {
+    const m = r.MONEDA || '01';
+    if (!out[m]) out[m] = { prima: 0, comision: 0, count: 0 };
+    out[m].count++;
+    out[m].prima += r.PRIMA || 0;
+    out[m].comision += r.PAGO_REINT || 0;
+  });
+  return out;
+}
+
+function statsByLineMoneda(rows) {
   const s = {};
   rows.forEach(r => {
-    const c = r.CLASE || '??';
-    if (!s[c]) s[c] = { count: 0, prima: 0, comision: 0 };
-    s[c].count++;
-    s[c].prima += r.PRIMA || 0;
-    s[c].comision += r.PAGO_REINT || 0;
+    const clase = r.CLASE || '??';
+    const moneda = r.MONEDA || '01';
+    const key = `${clase}|${moneda}`;
+    if (!s[key]) s[key] = { clase, moneda, count: 0, prima: 0, comision: 0 };
+    s[key].count++;
+    s[key].prima += r.PRIMA || 0;
+    s[key].comision += r.PAGO_REINT || 0;
   });
-  return s;
+  return Object.values(s);
 }
 
 function getFilteredIndices() {
+  const moneda = $('filter-moneda').value || 'TODAS';
   const line = $('filter-line').value || 'TODAS';
   const onlyDupes = $('filter-dupes').checked;
   const search = ($('filter-search').value || '').toLowerCase().trim();
   const out = [];
   data.forEach((r, i) => {
+    if (moneda !== 'TODAS' && (r.MONEDA || '01') !== moneda) return;
     if (line !== 'TODAS' && r.CLASE !== line) return;
     if (onlyDupes && !dupeIndices.has(i)) return;
     if (search) {
@@ -277,84 +310,152 @@ function render() {
   $('upload-section').classList.add('hidden');
   $('results').classList.remove('hidden');
 
-  // Summary cards (global, not filtered)
-  const totalComision = data.reduce((s, r) => s + (r.PAGO_REINT || 0), 0);
-  const totalPrima = data.reduce((s, r) => s + (r.PRIMA || 0), 0);
-  $('stat-comision').textContent = fmtColones.format(totalComision);
-  $('stat-prima').textContent = fmtColones.format(totalPrima);
+  // Summary cards (global totals, split by currency)
+  const totals = totalsByCurrency(data);
+  const crc = totals['01'] || { comision: 0, prima: 0, count: 0 };
+  const usd = totals['02'] || { comision: 0, prima: 0, count: 0 };
+  $('stat-comision-crc').textContent = fmtMoney(crc.comision, '01');
+  $('stat-comision-usd').textContent = fmtMoney(usd.comision, '02');
+  $('stat-prima-crc').textContent = fmtMoney(crc.prima, '01');
+  $('stat-prima-usd').textContent = fmtMoney(usd.prima, '02');
+  $('stat-count-crc').textContent = `${fmtNum.format(crc.count)} pólizas`;
+  $('stat-count-usd').textContent = `${fmtNum.format(usd.count)} pólizas`;
   $('stat-count').textContent = fmtNum.format(data.length);
   $('stat-dupes').textContent = fmtNum.format(dupeIndices.size);
 
-  // Filter options
+  // Line filter options
   const lines = [...new Set(data.map(r => r.CLASE).filter(Boolean))].sort();
-  const current = $('filter-line').value || 'TODAS';
-  $('filter-line').innerHTML = `<option value="TODAS">Todas las líneas</option>` +
+  const currentLine = $('filter-line').value || 'TODAS';
+  $('filter-line').innerHTML = `<option value="TODAS">Todas</option>` +
     lines.map(l => `<option value="${l}">${l} — ${lineName(l)}</option>`).join('');
-  $('filter-line').value = lines.includes(current) || current === 'TODAS' ? current : 'TODAS';
+  $('filter-line').value = lines.includes(currentLine) || currentLine === 'TODAS' ? currentLine : 'TODAS';
 
-  // Stats by line table + chart
-  const stats = statsByLine(data);
-  const statRows = Object.entries(stats).sort((a,b) => b[1].comision - a[1].comision);
-  const totalCom = statRows.reduce((s, [,v]) => s + v.comision, 0);
+  // Stats breakdown: grouped by (línea, moneda)
+  const statItems = statsByLineMoneda(data);
+  const totalPerMon = {};
+  statItems.forEach(it => { totalPerMon[it.moneda] = (totalPerMon[it.moneda] || 0) + it.comision; });
+  statItems.sort((a, b) => {
+    if (a.moneda !== b.moneda) return a.moneda.localeCompare(b.moneda);
+    return b.comision - a.comision;
+  });
+
+  // Build rows with a TOTALES row at end of each currency group
+  const rowsHtml = [];
+  let currentMon = null;
+  let groupTotals = { count: 0, prima: 0, comision: 0 };
+  const flushTotal = () => {
+    if (currentMon === null) return;
+    const m = moneInfo(currentMon);
+    rowsHtml.push(`
+      <tr class="border-t-2 border-slate-300 bg-slate-50 font-semibold">
+        <td class="p-2">TOTAL ${m.name}</td>
+        <td class="p-2 text-center"><span class="inline-block px-1.5 py-0.5 rounded ${currentMon==='01'?'bg-blue-200 text-blue-900':'bg-emerald-200 text-emerald-900'} text-xs font-bold">${m.symbol}</span></td>
+        <td class="p-2 text-right">${groupTotals.count}</td>
+        <td class="p-2 text-right font-mono text-xs">${fmtMoney(groupTotals.prima, currentMon)}</td>
+        <td class="p-2 text-right font-mono">${fmtMoney(groupTotals.comision, currentMon)}</td>
+        <td class="p-2 text-right">100%</td>
+      </tr>
+    `);
+  };
+
+  statItems.forEach(it => {
+    if (it.moneda !== currentMon) {
+      flushTotal();
+      currentMon = it.moneda;
+      groupTotals = { count: 0, prima: 0, comision: 0 };
+    }
+    const m = moneInfo(it.moneda);
+    const pct = totalPerMon[it.moneda] ? (it.comision / totalPerMon[it.moneda] * 100).toFixed(1) : 0;
+    rowsHtml.push(`
+      <tr class="border-t hover:bg-slate-50">
+        <td class="p-2"><strong>${it.clase}</strong><div class="text-slate-500 text-xs">${lineName(it.clase)}</div></td>
+        <td class="p-2 text-center"><span class="inline-block px-1.5 py-0.5 rounded ${it.moneda==='01'?'bg-blue-100 text-blue-800':'bg-emerald-100 text-emerald-800'} text-xs font-semibold">${m.symbol}</span></td>
+        <td class="p-2 text-right">${it.count}</td>
+        <td class="p-2 text-right font-mono text-xs text-slate-600">${fmtMoney(it.prima, it.moneda)}</td>
+        <td class="p-2 text-right font-mono">${fmtMoney(it.comision, it.moneda)}</td>
+        <td class="p-2 text-right text-slate-500">${pct}%</td>
+      </tr>
+    `);
+    groupTotals.count += it.count;
+    groupTotals.prima += it.prima;
+    groupTotals.comision += it.comision;
+  });
+  flushTotal();
 
   $('stats-table').innerHTML = `
     <table class="w-full text-sm">
       <thead class="bg-slate-100 sticky top-0"><tr>
         <th class="text-left p-2">Línea</th>
+        <th class="text-center p-2">Mon</th>
         <th class="text-right p-2">N°</th>
+        <th class="text-right p-2">Primas</th>
         <th class="text-right p-2">Comisión</th>
         <th class="text-right p-2">%</th>
       </tr></thead>
-      <tbody>
-        ${statRows.map(([code, s]) => `
-          <tr class="border-t hover:bg-slate-50">
-            <td class="p-2"><strong>${code}</strong><div class="text-slate-500 text-xs">${lineName(code)}</div></td>
-            <td class="p-2 text-right">${s.count}</td>
-            <td class="p-2 text-right font-mono">${fmtColones.format(s.comision)}</td>
-            <td class="p-2 text-right text-slate-500">${totalCom ? ((s.comision/totalCom)*100).toFixed(1) : 0}%</td>
-          </tr>
-        `).join('')}
-      </tbody>
+      <tbody>${rowsHtml.join('')}</tbody>
     </table>
   `;
 
-  renderChart(statRows);
+  renderChart(statItems);
   renderTable();
 }
 
-function renderChart(statRows) {
+function renderChart(statItems) {
   const ctx = $('chart-lineas').getContext('2d');
   if (chart) chart.destroy();
-  const colors = ['#2563eb','#16a34a','#dc2626','#ea580c','#ca8a04','#9333ea','#0891b2','#db2777','#65a30d','#7c3aed','#be123c','#0d9488'];
+
+  const lines = [...new Set(statItems.map(it => it.clase))].sort();
+  const crcByLine = {};
+  const usdByLine = {};
+  statItems.forEach(it => {
+    if (it.moneda === '01') crcByLine[it.clase] = (crcByLine[it.clase] || 0) + it.comision;
+    else if (it.moneda === '02') usdByLine[it.clase] = (usdByLine[it.clase] || 0) + it.comision;
+  });
+
+  const hasCRC = Object.values(crcByLine).some(v => v > 0);
+  const hasUSD = Object.values(usdByLine).some(v => v > 0);
+
+  const datasets = [];
+  if (hasCRC) datasets.push({
+    label: 'Colones (₡)', data: lines.map(l => crcByLine[l] || 0),
+    backgroundColor: '#2563eb', yAxisID: 'y', borderWidth: 0, borderRadius: 4
+  });
+  if (hasUSD) datasets.push({
+    label: 'Dólares ($)', data: lines.map(l => usdByLine[l] || 0),
+    backgroundColor: '#059669', yAxisID: 'y1', borderWidth: 0, borderRadius: 4
+  });
+
+  const scales = {};
+  if (hasCRC) scales.y = {
+    type: 'linear', position: 'left', beginAtZero: true,
+    ticks: { callback: (v) => fmtMoney(v, '01') },
+    title: { display: hasUSD, text: 'Colones ₡', color: '#2563eb' }
+  };
+  if (hasUSD) scales.y1 = {
+    type: 'linear', position: 'right', beginAtZero: true,
+    grid: { drawOnChartArea: false },
+    ticks: { callback: (v) => fmtMoney(v, '02') },
+    title: { display: hasCRC, text: 'Dólares $', color: '#059669' }
+  };
+
   chart = new Chart(ctx, {
     type: 'bar',
-    data: {
-      labels: statRows.map(r => r[0]),
-      datasets: [{
-        label: 'Comisión',
-        data: statRows.map(r => r[1].comision),
-        backgroundColor: statRows.map((_, i) => colors[i % colors.length]),
-        borderWidth: 0,
-        borderRadius: 4
-      }]
-    },
+    data: { labels: lines, datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
+        legend: { display: hasCRC && hasUSD, position: 'bottom' },
         tooltip: {
           callbacks: {
-            label: (ctx) => fmtColones.format(ctx.parsed.y)
+            label: (ctx) => {
+              const mon = ctx.dataset.yAxisID === 'y' ? '01' : '02';
+              return `${ctx.dataset.label}: ${fmtMoney(ctx.parsed.y, mon)}`;
+            }
           }
         }
       },
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: { callback: (v) => fmtColones.format(v) }
-        }
-      }
+      scales
     }
   });
 }
@@ -362,21 +463,25 @@ function renderChart(statRows) {
 function renderTable() {
   const indices = getFilteredIndices();
   const cols = [
-    { key: 'CLASE', label: 'Línea', class: 'font-semibold' },
-    { key: 'POLIZA', label: 'Póliza', class: 'font-mono text-xs' },
-    { key: 'MODULO', label: 'Mód', class: 'text-center' },
-    { key: 'NOMBRE', label: 'Cliente', class: '' },
-    { key: 'FEC_PAGADO', label: 'Pagado', class: 'text-xs', fmt: fmtDate },
-    { key: 'PRIMA', label: 'Prima', class: 'text-right font-mono text-xs', fmt: fmtColones.format },
-    { key: 'PAGO_REINT', label: 'Comisión', class: 'text-right font-mono font-semibold', fmt: fmtColones.format },
-    { key: 'RECIBO', label: 'Recibo', class: 'font-mono text-xs' }
+    { key: 'CLASE', label: 'Línea', cls: 'font-semibold' },
+    { key: 'MONEDA', label: 'Mon', cls: 'text-center', fmtRow: (r) => {
+      const m = moneInfo(r.MONEDA);
+      const color = r.MONEDA === '01' ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800';
+      return `<span class="inline-block px-1.5 py-0.5 rounded ${color} text-xs font-semibold">${m.symbol}</span>`;
+    }},
+    { key: 'POLIZA', label: 'Póliza', cls: 'font-mono text-xs' },
+    { key: 'MODULO', label: 'Mód', cls: 'text-center' },
+    { key: 'NOMBRE', label: 'Cliente', cls: '' },
+    { key: 'FEC_PAGADO', label: 'Pagado', cls: 'text-xs', fmt: fmtDate },
+    { key: 'PRIMA', label: 'Prima', cls: 'text-right font-mono text-xs', fmtRow: (r) => fmtMoney(r.PRIMA, r.MONEDA) },
+    { key: 'PAGO_REINT', label: 'Comisión', cls: 'text-right font-mono font-semibold', fmtRow: (r) => fmtMoney(r.PAGO_REINT, r.MONEDA) },
+    { key: 'RECIBO', label: 'Recibo', cls: 'font-mono text-xs' }
   ];
 
   $('table-header').innerHTML = cols.map(c =>
-    `<th class="text-left p-2 text-xs uppercase tracking-wide text-slate-600 ${c.class.includes('right') ? 'text-right' : ''}">${c.label}</th>`
+    `<th class="text-left p-2 text-xs uppercase tracking-wide text-slate-600 ${c.cls.includes('right') ? 'text-right' : c.cls.includes('center') ? 'text-center' : ''}">${c.label}</th>`
   ).join('') + '<th></th>';
 
-  // Render max 1000 rows for performance, show total filtered
   const max = 1000;
   const show = indices.slice(0, max);
 
@@ -386,62 +491,87 @@ function renderTable() {
     return `
       <tr class="border-t hover:bg-slate-50 ${isDup ? 'bg-red-50' : ''}">
         ${cols.map(c => {
-          let v = r[c.key];
-          if (c.fmt && v != null) v = c.fmt(v);
-          return `<td class="p-2 ${c.class}">${v ?? ''}</td>`;
+          let v;
+          if (c.fmtRow) v = c.fmtRow(r);
+          else if (c.fmt) v = c.fmt(r[c.key]);
+          else v = r[c.key] ?? '';
+          return `<td class="p-2 ${c.cls}">${v}</td>`;
         }).join('')}
         <td class="p-2">${isDup ? '<span class="text-red-600 text-xs font-bold bg-red-100 px-1.5 py-0.5 rounded">DUP</span>' : ''}</td>
       </tr>
     `;
   }).join('');
 
+  // Footer: totals by currency for filtered rows
+  const filteredRows = indices.map(i => data[i]);
+  const fTotals = totalsByCurrency(filteredRows);
+  const parts = [];
+  ['01', '02'].forEach(m => {
+    if (fTotals[m]) {
+      const sym = moneInfo(m).symbol;
+      parts.push(`<span class="inline-block"><span class="text-slate-500">${sym} Prima</span> <strong>${fmtMoney(fTotals[m].prima, m)}</strong> · <span class="text-slate-500">Comisión</span> <strong class="text-green-700">${fmtMoney(fTotals[m].comision, m)}</strong></span>`);
+    }
+  });
   const total = indices.length;
-  const suma = indices.reduce((s, i) => s + (data[i].PAGO_REINT || 0), 0);
-  $('row-count').innerHTML = `Mostrando ${total > max ? max : total} de ${total} registros filtrados ` +
-    `(${fmtNum.format(data.length)} totales) · ` +
-    `<strong>Comisión filtrada: ${fmtColones.format(suma)}</strong>`;
+  $('row-count').innerHTML = `Mostrando ${total > max ? max : total} de ${total} filtrados ` +
+    `(${fmtNum.format(data.length)} totales)` +
+    (parts.length ? `<br>${parts.join(' &nbsp;|&nbsp; ')}` : '');
 }
 
 function exportExcel() {
   const indices = getFilteredIndices();
-  const rows = indices.map(i => ({ ...data[i], DUPLICADO: dupeIndices.has(i) ? 'SI' : 'NO' }));
+  const rows = indices.map(i => {
+    const r = data[i];
+    return {
+      ...r,
+      MONEDA_NOMBRE: moneInfo(r.MONEDA).name,
+      DUPLICADO: dupeIndices.has(i) ? 'SI' : 'NO'
+    };
+  });
 
   const agente = $('agent-name').value || 'Agente';
   const licencia = $('agent-license').value || '';
-  const stats = statsByLine(indices.map(i => data[i]));
-  const statRows = Object.entries(stats).sort((a,b) => b[1].comision - a[1].comision);
-  const totalCom = statRows.reduce((s,[,v]) => s + v.comision, 0);
-  const totalPrima = statRows.reduce((s,[,v]) => s + v.prima, 0);
+  const filteredData = indices.map(i => data[i]);
+  const totals = totalsByCurrency(filteredData);
+  const crc = totals['01'] || { comision: 0, prima: 0, count: 0 };
+  const usd = totals['02'] || { comision: 0, prima: 0, count: 0 };
+
+  const statItems = statsByLineMoneda(filteredData);
+  statItems.sort((a, b) => {
+    if (a.moneda !== b.moneda) return a.moneda.localeCompare(b.moneda);
+    return b.comision - a.comision;
+  });
+  const totalPerMon = {};
+  statItems.forEach(it => { totalPerMon[it.moneda] = (totalPerMon[it.moneda] || 0) + it.comision; });
 
   const summary = [
-    ['REVISOR DE COMISIONES INS'],
+    ['CONTROL DE COMISIONES AGENTE INS'],
     ['Powered by Seguros Digitales SDI'],
     [],
     ['Agente', agente],
     ['Licencia', licencia],
     ['Fecha revisión', new Date().toLocaleDateString('es-CR')],
     [],
-    ['RESUMEN'],
+    ['RESUMEN GENERAL'],
     ['Registros', rows.length],
-    ['Primas total', totalPrima],
-    ['Comisión total', totalCom],
     ['Duplicados detectados', rows.filter(r => r.DUPLICADO === 'SI').length],
     [],
-    ['DESGLOSE POR LÍNEA'],
-    ['Código', 'Nombre', 'N° registros', 'Primas', 'Comisión', '%'],
-    ...statRows.map(([code, s]) => [
-      code,
-      lineName(code),
-      s.count,
-      s.prima,
-      s.comision,
-      totalCom ? +(s.comision/totalCom*100).toFixed(2) : 0
-    ])
+    ['TOTALES POR MONEDA'],
+    ['Moneda', 'N° pólizas', 'Primas', 'Comisión'],
+    ['Colones (₡)', crc.count, crc.prima, crc.comision],
+    ['Dólares ($)', usd.count, usd.prima, usd.comision],
+    [],
+    ['DESGLOSE POR LÍNEA Y MONEDA'],
+    ['Código', 'Nombre', 'Moneda', 'N°', 'Primas', 'Comisión', '% del total en esa moneda'],
+    ...statItems.map(it => {
+      const pct = totalPerMon[it.moneda] ? +(it.comision / totalPerMon[it.moneda] * 100).toFixed(2) : 0;
+      return [it.clase, lineName(it.clase), moneInfo(it.moneda).name, it.count, it.prima, it.comision, pct];
+    })
   ];
 
   const wb = XLSX.utils.book_new();
   const ws1 = XLSX.utils.aoa_to_sheet(summary);
-  ws1['!cols'] = [{wch:22},{wch:30},{wch:14},{wch:16},{wch:16},{wch:8}];
+  ws1['!cols'] = [{wch:22},{wch:30},{wch:14},{wch:14},{wch:16},{wch:16},{wch:10}];
   XLSX.utils.book_append_sheet(wb, ws1, 'Resumen');
 
   const ws2 = XLSX.utils.json_to_sheet(rows);
@@ -479,6 +609,7 @@ function clearAll() {
   localStorage.removeItem('sdi_csv_data');
   $('csv-input').value = '';
   $('filter-line').innerHTML = '';
+  $('filter-moneda').value = 'TODAS';
   $('filter-search').value = '';
   $('filter-dupes').checked = false;
   if (chart) { chart.destroy(); chart = null; }
@@ -489,6 +620,7 @@ function clearAll() {
 $('csv-input').addEventListener('change', (e) => {
   if (e.target.files[0]) parseCSV(e.target.files[0]);
 });
+$('filter-moneda').addEventListener('change', renderTable);
 $('filter-line').addEventListener('change', renderTable);
 $('filter-dupes').addEventListener('change', renderTable);
 $('filter-search').addEventListener('input', renderTable);
